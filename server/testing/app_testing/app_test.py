@@ -1,12 +1,15 @@
+import dbm
 from faker import Faker
 import flask
 import pytest
 from random import randint, choice as rc
 
-from app import app
-from models import db, User, Recipe
+from server.config import app
+from models import User, Recipe
 
 app.secret_key = b'a\xdb\xd2\x13\x93\xc1\xe9\x97\xef2\xe3\x004U\xd1Z'
+
+@pytest.mark.usefixtures('session')
 
 class TestSignup:
     '''Signup resource in app.py'''
@@ -17,12 +20,13 @@ class TestSignup:
         with app.app_context():
             
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
         
         with app.test_client() as client:
             
             response = client.post('/signup', json={
                 'username': 'ashketchum',
+                'email': 'ash@pokemon.com',
                 'password': 'pikachu',
                 'bio': '''I wanna be the very best
                         Like no one ever was
@@ -57,11 +61,13 @@ class TestSignup:
         with app.app_context():
             
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
         
         with app.test_client() as client:
             
             response = client.post('/signup', json={
+                'username': 'ashketchum',
+                'email': 'ash@pokemon.com',
                 'password': 'pikachu',
                 'bio': '''I wanna be the very best
                         Like no one ever was
@@ -85,7 +91,7 @@ class TestCheckSession:
         with app.app_context():
             
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
         
         with app.test_client() as client:
 
@@ -136,12 +142,13 @@ class TestLogin:
         with app.app_context():
             
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
         
         with app.test_client() as client:
 
             client.post('/signup', json={
                 'username': 'ashketchum',
+                'email': 'ash@pokemon.com',
                 'password': 'pikachu',
                 'bio': '''I wanna be the very best
                         Like no one ever was
@@ -165,23 +172,52 @@ class TestLogin:
                 assert(session.get('user_id') == \
                     User.query.filter(User.username == 'ashketchum').first().id)
 
-    def test_401s_bad_logins(self):
-        '''returns 401 for an invalid username and password at /login.'''
-        
+    
+    def test_401s_invalid_username(self):
+        '''returns 401 for an invalid username at /login.'''
+    
         with app.app_context():
-            
             User.query.delete()
-            db.session.commit()
-        
+            dbm.session.commit()
+    
         with app.test_client() as client:
-
             response = client.post('/login', json={
-                'username': 'mrfakeguy',
-                'password': 'paswerd',
+                'username': 'nonexistentuser',
+                'password': 'wrongpassword',
             })
 
-            assert response.status_code == 401
 
+            assert response.status_code == 401
+            with client.session_transaction() as session:
+                assert not session.get('user_id')
+
+# Test for login with existing user but wrong password
+    def test_401s_wrong_password(self):
+        '''returns 401 for an invalid password at /login.'''
+    
+        with app.app_context():
+            User.query.delete()
+            dbm.session.commit()
+    
+        with app.test_client() as client:
+            # First sign up a valid user
+            client.post('/signup', json={
+                'username': 'ashketchum',
+                'email': 'ash@pokemon.com',
+                'password': 'pikachu',
+                'bio': 'I wanna be the very best...',
+                'image_url': 'https://example.com/ash.jpg',
+            })
+        
+        
+            # Then test login with wrong password
+            response = client.post('/login', json={
+                'username': 'ashketchum',
+                'password': 'wrongpassword',
+            })
+    
+
+            assert response.status_code == 401
             with client.session_transaction() as session:
                 assert not session.get('user_id')
 
@@ -193,7 +229,7 @@ class TestLogout:
         with app.app_context():
             
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
         
         with app.test_client() as client:
 
@@ -210,7 +246,7 @@ class TestLogout:
             # check if logged out
             client.delete('/logout')
             with client.session_transaction() as session:
-                assert not session.get('user_id')
+                assert 'user_id' not in session
             
     def test_401s_if_no_session(self):
         '''returns 401 if a user attempts to logout without a session at /logout.'''
@@ -233,19 +269,21 @@ class TestRecipeIndex:
             
             Recipe.query.delete()
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
 
             fake = Faker()
 
             user = User(
                 username="Slagathor",
+                email="slagathor@example.com",  
+                password="password",
                 bio=fake.paragraph(nb_sentences=3),
                 image_url=fake.url(),
             )
 
             user.password_hash = 'secret'
 
-            db.session.add(user)
+            dbm.session.add(user)
 
             recipes = []
             for i in range(15):
@@ -261,9 +299,9 @@ class TestRecipeIndex:
 
                 recipes.append(recipe)
 
-            db.session.add_all(recipes)
+            dbm.session.add_all(recipes)
 
-            db.session.commit()
+            dbm.session.commit()
 
         # start actual test here
         with app.test_client() as client:
@@ -289,7 +327,7 @@ class TestRecipeIndex:
             
             Recipe.query.delete()
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
 
         # start actual test here
         with app.test_client() as client:
@@ -309,19 +347,21 @@ class TestRecipeIndex:
             
             Recipe.query.delete()
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
 
             fake = Faker()
 
             user = User(
                 username="Slagathor",
+                email="slagathor@example.com",  
+                password="password",
                 bio=fake.paragraph(nb_sentences=3),
                 image_url=fake.url(),
             )
             user.password_hash = 'secret'
             
-            db.session.add(user)
-            db.session.commit()
+            dbm.session.add(user)
+            dbm.session.commit()
 
         # start actual test here
         with app.test_client() as client:
@@ -354,20 +394,22 @@ class TestRecipeIndex:
             
             Recipe.query.delete()
             User.query.delete()
-            db.session.commit()
+            dbm.session.commit()
 
             fake = Faker()
 
             user = User(
                 username="Slagathor",
+                email="slagathor@example.com",  
+                password="password",
                 bio=fake.paragraph(nb_sentences=3),
                 image_url=fake.url(),
             )
             user.password_hash = 'secret'
             
 
-            db.session.add(user)
-            db.session.commit()
+            dbm.session.add(user)
+            dbm.session.commit()
 
         # start actual test here
         with app.test_client() as client:

@@ -1,8 +1,11 @@
 from sqlalchemy.exc import IntegrityError
 import pytest
 
-from app import app
-from models import db, User, Recipe
+from server.config import app
+from server.extensions import db
+from models import User, Recipe
+
+@pytest.mark.usefixtures('session')
 
 class TestUser:
     '''User in models.py'''
@@ -17,6 +20,8 @@ class TestUser:
 
             user = User(
                 username="Liz",
+                email="liz@example.com",  
+                password="password",
                 image_url="https://prod-images.tcm.com/Master-Profile-Images/ElizabethTaylor.jpg",
                 bio="""Dame Elizabeth Rosemond Taylor DBE (February 27, 1932""" + \
                     """ - March 23, 2011) was a British-American actress. """ + \
@@ -90,7 +95,11 @@ class TestUser:
             User.query.delete()
             db.session.commit()
 
-            user = User(username="Prabhdip")
+            user = User(
+                username="Prabhdip",
+                email="prabhdip@example.com",  
+                password="password"
+            )
 
             recipe_1 = Recipe(
                 title="Delicious Shed Ham",
